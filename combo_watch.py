@@ -371,4 +371,15 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # Kører i ring i RUN_SECONDS (fx 5,7 timer) med 60 sek. pause, ellers kun én gang
+    run_for = int(os.environ.get("RUN_SECONDS") or 0)
+    t_end = time.time() + run_for
+    while True:
+        t0 = time.time()
+        try:
+            main()
+        except Exception as e:  # noqa: BLE001
+            print("Fejl i runden (prøver igen om lidt):", e)
+        if time.time() >= t_end:
+            break
+        time.sleep(max(0, 60 - (time.time() - t0)))
