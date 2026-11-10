@@ -29,7 +29,7 @@ WEBHOOK = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
 MIN_PAYOUT = float(os.environ.get("MIN_PAYOUT") or 1000)
 DRY_RUN = os.environ.get("DRY_RUN", "false").strip().lower() == "true"
 LOOKBACK = int(os.environ.get("LOOKBACK_BLOCKS") or 0)
-LOG_CHUNK = int(os.environ.get("LOG_CHUNK") or 2000)
+LOG_CHUNK = int(os.environ.get("LOG_CHUNK") or 10)  # Alchemy gratis: max 10 blokke pr. opslag
 
 STATE_FILE = "state.json"
 FIRST_RUN_BLOCKS = 300          # ca. 10 min tilbage ved allerførste kørsel
@@ -207,7 +207,7 @@ def build_message(c, row):
     wallet = c["to"]
     name = profile_name(wallet) or f"{wallet[:6]}…{wallet[-4:]}"
     payout = c["payout"]
-    stake = row.get("amount_usdc")
+    prices = [leg.get("leg_current_price") for leg in row.get("legs") or []]
 
     lines = []
     for leg in row.get("legs") or []:
@@ -226,9 +226,11 @@ def build_message(c, row):
         {"name": "Konto", "value": f"[{name}](https://polymarket.com/profile/{wallet})", "inline": True},
         {"name": "Mulig udbetaling", "value": f"${payout:,.0f}", "inline": True},
     ]
-    if isinstance(stake, (int, float)) and stake > 0:
-        fields.append({"name": "Indsats (ca.)", "value": f"${stake:,.0f}", "inline": True})
-        fields.append({"name": "Odds (ca.)", "value": f"{payout / stake:.2f}", "inline": True})
+    if prices and all(isinstance(p, (int, float)) and p > 0 for p in prices):
+        prob = 1.0
+        for p in prices:
+            prob *= p
+        fields.append({"name": "Odds lige nu (ca.)", "value": f"{1 / prob:.2f}", "inline": True})
     fields.append({"name": "Ben", "value": str(len(row.get("legs") or [])), "inline": True})
     fields.append({"name": "Transaktion", "value": f"[Polygonscan](https://polygonscan.com/tx/{c['tx']})", "inline": True})
 
