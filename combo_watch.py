@@ -65,6 +65,21 @@ DECIMALS = 10 ** 6    # pUSD / andele har 6 decimaler
 
 CS2_RE = re.compile(r"(^|[^a-z0-9])(cs2|counter[\s-]?strike|cs:?go)([^a-z0-9]|$)", re.I)
 
+# Tier 1-turneringer. Et CS2-ben fra en af disse tæller IKKE.
+# Botten poster kun, hvis mindst ét CS2-ben er fra en anden turnering (tier 2-4).
+# Tilføj/fjern navne her, hvis en turnering bliver sorteret forkert.
+TIER1_EVENTS = [
+    r"\biem\b", r"intel extreme masters",
+    r"\bblast\b",
+    r"\bpgl\b",
+    r"esl pro league",
+    r"\bmajor\b",
+    r"esports world cup", r"\bewc\b",
+    r"fissure playground",
+    r"thunderpick world championship",
+]
+TIER1_RE = re.compile("|".join(TIER1_EVENTS), re.I)
+
 
 # ---------- HTTP ----------
 def http_json(url, payload=None, retries=4):
@@ -189,14 +204,28 @@ def profile_name(wallet):
         return None
 
 
-def is_cs2_leg(leg):
+def leg_text(leg):
     m = leg.get("market") or {}
     ev = m.get("event") or {}
-    text = " ".join(str(x) for x in (
+    return " ".join(str(x) for x in (
         m.get("slug"), m.get("question"), m.get("title"), m.get("subcategory"),
         ev.get("event_slug"), ev.get("event_title"),
     ) if x)
-    return bool(CS2_RE.search(text))
+
+
+def is_cs2_leg(leg):
+    return bool(CS2_RE.search(leg_text(leg)))
+
+
+def is_tier1_leg(leg):
+    m = leg.get("market") or {}
+    ev = m.get("event") or {}
+    text = " ".join(str(x) for x in (ev.get("event_title"), m.get("question"), ev.get("event_slug")) if x)
+    return bool(TIER1_RE.search(text.replace("-", " ")))
+
+
+def is_lower_tier_cs2_leg(leg):
+    return is_cs2_leg(leg) and not is_tier1_leg(leg)
 
 
 # ---------- Discord ----------
@@ -214,7 +243,7 @@ def build_message(c, row):
         m = leg.get("market") or {}
         ev = m.get("event") or {}
         icon = STATUS_ICON.get(str(leg.get("leg_status", "")).upper(), "•")
-        tag = "🎮 " if is_cs2_leg(leg) else ""
+        tag = ("🏆 " if is_tier1_leg(leg) else "🎮 ") if is_cs2_leg(leg) else ""
         title = ev.get("event_title") or m.get("question") or m.get("title") or "?"
         pick = leg.get("leg_outcome_label") or m.get("outcome") or "?"
         price = leg.get("leg_current_price")
@@ -328,7 +357,7 @@ def main():
                 seen.add(c["key"])
             continue
         seen.add(c["key"])
-        if any(is_cs2_leg(leg) for leg in row.get("legs") or []):
+        if any(is_lower_tier_cs2_leg(leg) for leg in row.get("legs") or []):
             post(build_message(c, row))
             alerts += 1
 
