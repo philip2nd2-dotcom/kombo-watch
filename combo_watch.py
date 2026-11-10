@@ -33,7 +33,7 @@ LOG_CHUNK = int(os.environ.get("LOG_CHUNK") or 10)  # Alchemy gratis: max 10 blo
 
 STATE_FILE = "state.json"
 FIRST_RUN_BLOCKS = 300          # ca. 10 min tilbage ved allerførste kørsel
-MAX_BLOCKS_PER_RUN = 20000      # sikkerhed: max ca. 11 timer pr. kørsel
+MAX_BLOCKS_PER_RUN = 1800       # indhenter højst ca. 1 time ad gangen
 PENDING_MAX_AGE = 2 * 60 * 60   # prøv at finde benene i op til 2 timer
 SEEN_KEEP = 2000
 
@@ -82,7 +82,7 @@ TIER1_RE = re.compile("|".join(TIER1_EVENTS), re.I)
 
 
 # ---------- HTTP ----------
-def http_json(url, payload=None, retries=4):
+def http_json(url, payload=None, retries=8):
     data = json.dumps(payload).encode() if payload is not None else None
     headers = {
         "User-Agent": "cs2-kombo-watch/1.0",
@@ -97,8 +97,8 @@ def http_json(url, payload=None, retries=4):
                 return json.loads(body) if body else None
         except urllib.error.HTTPError as e:
             if e.code in (429, 500, 502, 503, 504) and attempt < retries - 1:
-                wait = int(e.headers.get("Retry-After") or 2 * (attempt + 1))
-                time.sleep(min(wait, 30))
+                wait = int(e.headers.get("Retry-After") or 3 * (attempt + 1))
+                time.sleep(min(wait, 60))
                 continue
             raise
         except urllib.error.URLError:
@@ -133,6 +133,7 @@ def scan(frm, to):
         try:
             logs += get_logs(cur, end)
             cur = end + 1
+            time.sleep(0.25)  # skån Alchemy (gratis-grænse)
         except Exception as e:  # noqa: BLE001
             if chunk > 10:
                 chunk = max(10, chunk // 4)
